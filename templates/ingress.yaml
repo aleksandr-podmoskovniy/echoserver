@@ -6,7 +6,10 @@ metadata:
   namespace: {{ .Chart.Name }}
   {{- include "helm_lib_module_labels" (list . (dict "app" "echoserver")) | nindent 2 }}
   annotations:
-    kubernetes.io/ingress.class: nginx
+    web.deckhouse.io/export-name: "kubeconfig"
+    web.deckhouse.io/export-icon: "/public/img/kubeconfig-generator.jpeg"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      {{ include "helm_lib_module_ingress_configuration_snippet" $ | nindent 6 }}
 spec:
   ingressClassName: {{ include "helm_lib_module_ingress_class" . | quote }}
   rules:
@@ -19,10 +22,29 @@ spec:
           service:
             name: echoserver
             port:
-              number: 80
+              name: http
   {{- if (include "helm_lib_module_https_ingress_tls_enabled" .) }}
   tls:
     - hosts:
         - {{ include "helm_lib_module_public_domain" (list . "echoserver") }}
       secretName: {{ include "helm_lib_module_https_secret_name" (list . "ingress-tls") }}
   {{- end }}
+---
+{{- if eq (include "helm_lib_module_https_mode" .) "CertManager" }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: echoserver
+  namespace: echoserver
+  {{- include "helm_lib_module_labels" (list . (dict "app" "echoserver")) | nindent 2 }}
+spec:
+  certificateOwnerRef: false
+  secretName: {{ include "helm_lib_module_https_secret_name" (list . "ingress-tls") }}
+  {{ include "helm_lib_module_generate_common_name" (list . "echoserver") | nindent 2 }}
+  dnsNames:
+    - {{ include "helm_lib_module_public_domain" (list . "echoserver") }}
+  issuerRef:
+    name: {{ include "helm_lib_module_https_cert_manager_cluster_issuer_name" . }}
+    kind: ClusterIssuer
+{{- end }}
